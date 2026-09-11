@@ -1,0 +1,97 @@
+use super::Radarr;
+use crate::error::Result;
+use crate::helpers::str_val;
+use crate::interface::ApiClientExt;
+use crate::is_default;
+use crate::req::{Request, path_join};
+use crate::shared::{FormatItem, Quality, Value};
+use serde::{Deserialize, Serialize};
+
+const BP_QUALITY_PROFILE: &str = "v3/qualityProfile";
+
+/// QualityProfile is applied to Movies.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QualityProfile {
+    /// Profile ID.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub id: i64,
+    /// Profile name.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub name: String,
+    /// Whether releases are upgraded until the cutoff is met.
+    #[serde(default)]
+    pub upgrade_allowed: bool,
+    /// Quality that stops upgrades.
+    #[serde(default)]
+    pub cutoff: i64,
+    /// Qualities allowed by this profile.
+    #[serde(default, skip_serializing_if = "is_default", rename = "items")]
+    pub qualities: Vec<Quality>,
+    /// Minimum custom format score required.
+    #[serde(default)]
+    pub min_format_score: i64,
+    /// Minimum custom format score required to upgrade.
+    #[serde(default)]
+    pub min_upgrade_format_score: i64,
+    /// Custom format score that stops upgrades.
+    #[serde(default)]
+    pub cutoff_format_score: i64,
+    /// Custom format scores in this profile.
+    #[serde(default)]
+    pub format_items: Vec<FormatItem>,
+    /// Language required by this profile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<Value>,
+}
+
+impl Radarr {
+    /// Returns all configured quality profiles.
+    pub async fn get_quality_profiles(&self) -> Result<Vec<QualityProfile>> {
+        self.api.get_into(Request::new(BP_QUALITY_PROFILE)).await
+    }
+
+    /// Returns a single quality profile.
+    pub async fn get_quality_profile(&self, profile_id: i64) -> Result<QualityProfile> {
+        self.api
+            .get_into(Request::new(path_join(&[
+                BP_QUALITY_PROFILE,
+                &str_val(profile_id),
+            ])))
+            .await
+    }
+
+    /// Returns the template/schema quality profiles.
+    pub async fn get_quality_profile_schema(&self) -> Result<Vec<QualityProfile>> {
+        self.api
+            .get_into(Request::new(path_join(&[BP_QUALITY_PROFILE, "schema"])))
+            .await
+    }
+
+    /// Creates a quality profile.
+    pub async fn add_quality_profile(&self, profile: &QualityProfile) -> Result<QualityProfile> {
+        let mut profile = profile.clone();
+        profile.id = 0;
+
+        self.api
+            .post_into(Request::new(BP_QUALITY_PROFILE).with_json(&profile)?)
+            .await
+    }
+
+    /// Updates a quality profile in place.
+    pub async fn update_quality_profile(&self, profile: &QualityProfile) -> Result<QualityProfile> {
+        let req = Request::new(path_join(&[BP_QUALITY_PROFILE, &str_val(profile.id)]))
+            .with_json(profile)?;
+        self.api.put_into(req).await
+    }
+
+    /// Deletes a quality profile.
+    pub async fn delete_quality_profile(&self, profile_id: i64) -> Result<()> {
+        self.api
+            .delete_any(Request::new(path_join(&[
+                BP_QUALITY_PROFILE,
+                &str_val(profile_id),
+            ])))
+            .await
+    }
+}
